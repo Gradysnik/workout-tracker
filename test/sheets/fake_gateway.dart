@@ -59,4 +59,14 @@ class FakeSheetsGateway implements SheetsGateway {
     _net('update $sheet $rowNumber');
     spreadsheets[spreadsheetId]![sheet]![rowNumber - 1] = List.of(cells);
   }
+
+  @override
+  Future<void> deleteRows(
+      String spreadsheetId, String sheet, List<int> rowNumbers) async {
+    _net('delete $sheet $rowNumbers');
+    final rows = spreadsheets[spreadsheetId]![sheet]!;
+    for (final n in rowNumbers.toList()..sort((a, b) => b.compareTo(a))) {
+      rows.removeAt(n - 1);
+    }
+  }
 }

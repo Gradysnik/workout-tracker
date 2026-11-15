@@ -17,4 +17,8 @@ abstract class SheetsGateway {
   /// Перезаписывает строку с номером [rowNumber] (нумерация с 1).
   Future<void> updateRow(String spreadsheetId, String sheet, int rowNumber,
       List<Object?> cells);
+
+  /// Удаляет строки листа целиком; номера — до удаления (нумерация с 1).
+  Future<void> deleteRows(
+      String spreadsheetId, String sheet, List<int> rowNumbers);
 }

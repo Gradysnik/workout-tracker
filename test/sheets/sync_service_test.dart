@@ -111,13 +111,18 @@ void main() {
       expect(sheetRows(), hasLength(3));
       expect(sheetJournal().map((r) => (r.id, r.weight)), [('1', 40.0), ('2', 99.0)]);
     });
-    test('удаление отправленной строки очищает её в листе', () async {
-      await journal.upsert(row('1'));
-      await journal.upsert(row('2', setNo: 2));
+    test('удаление отправленных строк убирает их из листа, не оставляя пустых', () async {
+      for (final id in ['1', '2', '3', '4']) {
+        await journal.upsert(row(id, setNo: int.parse(id)));
+      }
       await sync.pushJournal();
       await journal.delete('1');
+      await journal.delete('3');
+      await journal.upsert(row('4', setNo: 4, w: 77));
+      await journal.upsert(row('5', setNo: 5));
       await sync.pushJournal();
-      expect(sheetJournal().map((r) => r.id), ['2']);
+      expect(sheetRows(), hasLength(4));
+      expect(sheetJournal().map((r) => (r.id, r.weight)), [('2', 40.0), ('4', 77.0), ('5', 40.0)]);
       expect(await journal.pending(), isEmpty);
     });
     test('строка, созданная и удалённая до отправки, в лист не попадает', () async {

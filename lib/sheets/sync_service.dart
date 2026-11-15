@@ -66,18 +66,26 @@ class SyncService {
           '${sheet[i][0]}': i + 1
     };
 
+    // Порядок важен: правки по номерам строк, затем добавление в конец,
+    // и только потом удаление, которое сдвигает номера.
     final toAppend = <List<Object?>>[];
+    final toDelete = <int>[];
     for (final p in pending) {
       final rowNumber = rowNumbers[p.row.id];
-      if (rowNumber != null) {
-        await _gateway.updateRow(id, journalSheet, rowNumber,
-            p.deleted ? List.filled(journalHeader.length, '') : journalRowToCells(p.row));
-      } else if (!p.deleted) {
+      if (p.deleted) {
+        if (rowNumber != null) toDelete.add(rowNumber);
+      } else if (rowNumber != null) {
+        await _gateway.updateRow(
+            id, journalSheet, rowNumber, journalRowToCells(p.row));
+      } else {
         toAppend.add(journalRowToCells(p.row));
       }
     }
     if (toAppend.isNotEmpty) {
       await _gateway.appendRows(id, journalSheet, toAppend);
+    }
+    if (toDelete.isNotEmpty) {
+      await _gateway.deleteRows(id, journalSheet, toDelete);
     }
     await _journal.markSynced(pending.map((p) => p.row.id));
     return pending.length;
