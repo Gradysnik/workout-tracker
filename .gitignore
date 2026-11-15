@@ -1,1 +1,15 @@
 .superpowers/
+.dart_tool/
+.idea/
+*.iml
+build/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+*.g.dart
+android/key.properties
+*.jks
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+.DS_Store
