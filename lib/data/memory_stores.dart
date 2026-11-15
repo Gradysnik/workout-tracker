@@ -95,12 +95,12 @@ class MemoryJournalStore implements JournalStore {
       ];
 
   @override
-  Future<void> markSynced(Iterable<String> ids) async {
-    for (final id in ids) {
-      final e = _entries[id];
-      if (e == null) continue;
+  Future<void> markSynced(Iterable<PendingRow> pushed) async {
+    for (final p in pushed) {
+      final e = _entries[p.row.id];
+      if (e == null || e.row != p.row || e.deleted != p.deleted) continue;
       if (e.deleted) {
-        _entries.remove(id);
+        _entries.remove(p.row.id);
       } else {
         e.pending = false;
       }

@@ -38,40 +38,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _sync() => _guard(() async {
-        final report = await ref.read(syncRunnerProvider).run();
-        if (report == null) {
-          _say('Сначала войдите в Google');
-        } else if (report.failure != null) {
-          _say('Не удалось синхронизировать: ${report.failure}');
-        } else {
-          _say('Синхронизация выполнена');
-        }
-      });
+  Future<void> _sync() => _guard(_syncNow);
+
+  Future<void> _syncNow() async {
+    final report = await ref.read(syncRunnerProvider).run();
+    if (report == null) {
+      _say('Сначала войдите в Google');
+    } else if (report.failure != null) {
+      _say('Не удалось синхронизировать: ${report.failure}');
+    } else {
+      _say('Синхронизация выполнена');
+    }
+  }
+
+  Future<bool> _confirm(String title, String text, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(child: Text(text)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Отмена')),
+            FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(action)),
+          ],
+        ),
+      ) ??
+      false;
 
   Future<void> _restore() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Восстановить из таблицы?'),
-        content: const Text(
-            'Журнал на телефоне будет заменён содержимым листа «Журнал». '
-            'Неотправленные подходы сначала уйдут в таблицу.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Отмена')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Восстановить')),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    if (!await _confirm(
+        'Восстановить из таблицы?',
+        'Журнал на телефоне будет заменён содержимым листа «Журнал». '
+            'Неотправленные подходы сначала уйдут в таблицу.',
+        'Восстановить')) {
+      return;
+    }
+    final sync = ref.read(syncServiceProvider)!;
+    var errors = const <String>[];
+    var done = false;
     await _guard(() async {
-      await ref.read(syncServiceProvider)!.restoreJournal();
-      _say('Журнал восстановлен из таблицы');
+      errors = await sync.restoreJournal();
+      done = errors.isEmpty;
     });
+    if (errors.isNotEmpty && mounted) {
+      // Строки, которые не удалось прочитать, пропали бы с телефона.
+      final shown = errors.take(8).join('\n');
+      final more = errors.length > 8 ? '\n…и ещё ${errors.length - 8}' : '';
+      if (!await _confirm(
+          'Часть строк не прочитана',
+          'Эти строки листа «Журнал» не удалось разобрать:\n\n'
+              '$shown$more\n\nИсправьте их в таблице или восстановите '
+              'журнал без них.',
+          'Восстановить без них')) {
+        return;
+      }
+      await _guard(() async {
+        await sync.restoreJournal(ignoreErrors: true);
+        done = true;
+      });
+    }
+    if (done) _say('Журнал восстановлен из таблицы');
   }
 
   @override
@@ -112,9 +142,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       'Нужно для синхронизации с таблицей. Приложение получит '
                       'доступ только к таблице, которую создаст само.'),
                   onTap: () => _guard(() async {
-                    await auth.signIn();
+                    final signedIn = await auth.signIn();
+                    if (!mounted) return;
                     setState(() {});
-                    await _sync();
+                    if (signedIn) await _syncNow();
                   }),
                 )
               else if (auth != null)
@@ -124,7 +155,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: const Text('Выйти из аккаунта'),
                   onTap: () => _guard(() async {
                     await auth.signOut();
-                    setState(() {});
+                    // Другой аккаунт получит свою таблицу.
+                    await sync.forgetSpreadsheet();
+                    if (mounted) setState(() {});
                   }),
                 ),
               ListTile(

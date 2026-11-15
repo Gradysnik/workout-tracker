@@ -51,7 +51,12 @@ final revisionProvider = StreamProvider<int>((ref) {
 /// Тренировка, выбранная вручную вместо предложенной.
 class SelectedWorkout extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() {
+    // Выбор действует только в течение дня: с новой датой сбрасывается.
+    ref.watch(todayDateProvider);
+    return null;
+  }
+
   void select(String? workout) => state = workout;
 }
 

@@ -134,13 +134,63 @@ void main() {
     });
   });
 
-  test('restoreJournal сначала отправляет своё, потом заменяет журнал содержимым листа', () async {
-    await sync.ensureSpreadsheet();
-    gw.only[journalSheet]!.add(journalRowToCells(row('из-таблицы', w: 70)));
-    await journal.upsert(row('локальная'));
-    await sync.restoreJournal();
-    expect((await journal.historyOf('тяга')).map((r) => r.id).toSet(), {'из-таблицы', 'локальная'});
+  test('правка строки во время отправки уходит следующей синхронизацией', () async {
+    await journal.upsert(row('1'));
+    gw.onAppend = () async {
+      gw.onAppend = null;
+      await journal.upsert(row('1', w: 99));
+    };
+    await sync.pushJournal();
+    expect((await journal.pending()).single.row.weight, 99);
+    await sync.pushJournal();
+    expect(sheetJournal().map((r) => (r.id, r.weight)), [('1', 99.0)]);
     expect(await journal.pending(), isEmpty);
+  });
+
+  group('restoreJournal', () {
+    test('сначала отправляет своё, потом заменяет журнал содержимым листа', () async {
+      await sync.ensureSpreadsheet();
+      gw.only[journalSheet]!.add(journalRowToCells(row('из-таблицы', w: 70)));
+      await journal.upsert(row('локальная'));
+      expect(await sync.restoreJournal(), isEmpty);
+      expect((await journal.historyOf('тяга')).map((r) => r.id).toSet(), {'из-таблицы', 'локальная'});
+      expect(await journal.pending(), isEmpty);
+    });
+    test('при неразборных строках ничего не заменяет и возвращает ошибки', () async {
+      await sync.ensureSpreadsheet();
+      gw.only[journalSheet]!.addAll([
+        journalRowToCells(row('хорошая', w: 70)),
+        ['плохая', 'вчера', 'A', 'Тяга', 1, 1, '60кг', 10],
+      ]);
+      await journal.replaceAll([row('старая')]);
+      final errors = await sync.restoreJournal();
+      expect(errors, ['Журнал, строка 3: непонятная дата «вчера»']);
+      expect((await journal.historyOf('тяга')).map((r) => r.id), ['старая']);
+    });
+    test('с ignoreErrors восстанавливает разобранные строки', () async {
+      await sync.ensureSpreadsheet();
+      gw.only[journalSheet]!.addAll([
+        journalRowToCells(row('хорошая', w: 70)),
+        ['плохая', 'вчера', 'A', 'Тяга', 1, 1, 60, 10],
+      ]);
+      await journal.replaceAll([row('старая')]);
+      await sync.restoreJournal(ignoreErrors: true);
+      expect((await journal.historyOf('тяга')).map((r) => r.id), ['хорошая']);
+    });
+    test('одновременно с синхронизацией не дублирует строки', () async {
+      await journal.upsert(row('1'));
+      await Future.wait([sync.syncAll(), sync.restoreJournal(), sync.pushJournal()]);
+      expect(sheetJournal().map((r) => r.id), ['1']);
+    });
+  });
+
+  test('forgetSpreadsheet заставляет искать таблицу заново', () async {
+    final id = await sync.ensureSpreadsheet();
+    await sync.forgetSpreadsheet();
+    expect(await sync.spreadsheetUrl(), isNull);
+    gw.calls.clear();
+    expect(await sync.ensureSpreadsheet(), id);
+    expect(gw.calls, ['find']);
   });
 
   group('syncAll', () {

@@ -21,7 +21,8 @@ void main(List<String> args) {
   final out = Directory(args[1])..createSync(recursive: true);
   void write(String name, List<String> header, Iterable<List<Object?>> rows) {
     File('${out.path}/$name')
-        .writeAsStringSync(Csv(lineDelimiter: '\n').encode([header, ...rows]));
+        .writeAsStringSync(Csv(lineDelimiter: '\n')
+            .encode([header, ...rows.map(toCsvCells)]));
   }
 
   write('program.csv', programHeader, result.program.map(programToCells));

@@ -138,13 +138,25 @@ class DriftJournalStore implements JournalStore {
       ];
 
   @override
-  Future<void> markSynced(Iterable<String> ids) => db.transaction(() async {
-        final list = ids.toList();
-        await (db.delete(_t)
-              ..where((t) => t.id.isIn(list) & t.deleted.equals(true)))
-            .go();
-        await (db.update(_t)..where((t) => t.id.isIn(list)))
-            .write(const JournalRecordsCompanion(pending: Value(false)));
+  Future<void> markSynced(Iterable<PendingRow> pushed) =>
+      db.transaction(() async {
+        for (final p in pushed) {
+          final current = await (db.select(_t)
+                ..where((t) => t.id.equals(p.row.id)))
+              .getSingleOrNull();
+          // Строка изменилась после снимка — оставляем её в очереди.
+          if (current == null ||
+              current.deleted != p.deleted ||
+              _toRow(current) != p.row) {
+            continue;
+          }
+          if (current.deleted) {
+            await (db.delete(_t)..where((t) => t.id.equals(p.row.id))).go();
+          } else {
+            await (db.update(_t)..where((t) => t.id.equals(p.row.id)))
+                .write(const JournalRecordsCompanion(pending: Value(false)));
+          }
+        }
       });
 
   @override

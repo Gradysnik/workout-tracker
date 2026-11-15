@@ -8,6 +8,9 @@ class FakeSheetsGateway implements SheetsGateway {
   bool failAfterAppend = false;
   bool offline = false;
 
+  /// Вызывается посреди отправки, после добавления строк в лист.
+  Future<void> Function()? onAppend;
+
   Map<String, List<List<Object?>>> get only => spreadsheets.values.single;
 
   void _net(String call) {
@@ -47,6 +50,7 @@ class FakeSheetsGateway implements SheetsGateway {
       String spreadsheetId, String sheet, List<List<Object?>> rows) async {
     _net('append $sheet ${rows.length}');
     spreadsheets[spreadsheetId]![sheet]!.addAll(rows.map(List.of));
+    await onAppend?.call();
     if (failAfterAppend) {
       failAfterAppend = false;
       throw Exception('обрыв связи');

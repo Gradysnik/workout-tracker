@@ -108,4 +108,26 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(ExerciseScreen), findsOneWidget);
   });
+
+  testWidgets('неудачная синхронизация видна: сообщение и плашка', (t) async {
+    final gw = FakeSheetsGateway()..offline = true;
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    await h.pump(t, const Scaffold(body: TodayScreen()));
+    await t.fling(find.text('Тяга верхнего блока'), const Offset(0, 400), 1000);
+    await t.pumpAndSettle();
+    expect(find.textContaining('Не удалось синхронизировать'), findsWidgets);
+    expect(find.byKey(const Key('sync-problem')), findsOneWidget);
+  });
+
+  testWidgets('ошибки заполнения таблицы видны на экране «Сегодня»', (t) async {
+    final gw = FakeSheetsGateway();
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    await h.sync!.ensureSpreadsheet();
+    gw.only['Программа']!.add(['A', 1, 'Тяга', 'силовая', 4, '8–10']);
+    await h.pump(t, const Scaffold(body: TodayScreen()));
+    await t.fling(find.text('Тяга верхнего блока'), const Offset(0, 400), 1000);
+    await t.pumpAndSettle();
+    expect(find.text('Заполните лист «Программа» в таблице'), findsOneWidget);
+    expect(find.textContaining('Программа, строка 2: неизвестный тип «силовая»'), findsOneWidget);
+  });
 }

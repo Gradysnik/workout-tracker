@@ -52,22 +52,38 @@ void contract(String name, Stores Function() make) {
     });
     test('delete прячет строку, но оставляет её в очереди как удалённую', () async {
       await s.journal.upsert(row('1', 10, 'Тяга', 1));
-      await s.journal.markSynced(['1']);
+      await s.journal.markSynced(await s.journal.pending());
       await s.journal.delete('1');
       expect(await s.journal.historyOf('тяга'), isEmpty);
       expect(await s.journal.sessions(), isEmpty);
       final p = await s.journal.pending();
       expect(p.map((e) => (e.row.id, e.deleted)), [('1', true)]);
-      await s.journal.markSynced(['1']);
+      await s.journal.markSynced(await s.journal.pending());
       expect(await s.journal.pending(), isEmpty);
     });
     test('новая строка ждёт отправки, после markSynced — нет, после правки — снова', () async {
       await s.journal.upsert(row('1', 10, 'Тяга', 1));
       expect((await s.journal.pending()).map((e) => (e.row.id, e.deleted)), [('1', false)]);
-      await s.journal.markSynced(['1']);
+      await s.journal.markSynced(await s.journal.pending());
       expect(await s.journal.pending(), isEmpty);
       await s.journal.upsert(row('1', 10, 'Тяга', 1, w: 99));
       expect((await s.journal.pending()).single.row.weight, 99);
+    });
+    test('правка во время отправки не теряется: markSynced снимает отметку только с неизменённых строк', () async {
+      await s.journal.upsert(row('1', 10, 'Тяга', 1));
+      await s.journal.upsert(row('2', 10, 'Тяга', 2));
+      final pushed = await s.journal.pending();
+      await s.journal.upsert(row('1', 10, 'Тяга', 1, r: 12));
+      await s.journal.markSynced(pushed);
+      final left = await s.journal.pending();
+      expect(left.map((e) => (e.row.id, e.row.reps, e.deleted)), [('1', 12, false)]);
+    });
+    test('удаление во время отправки не теряется', () async {
+      await s.journal.upsert(row('1', 10, 'Тяга', 1));
+      final pushed = await s.journal.pending();
+      await s.journal.delete('1');
+      await s.journal.markSynced(pushed);
+      expect((await s.journal.pending()).map((e) => (e.row.id, e.deleted)), [('1', true)]);
     });
     test('replaceAll заменяет журнал и ничего не ставит в очередь', () async {
       await s.journal.upsert(row('1', 10, 'Тяга', 1));

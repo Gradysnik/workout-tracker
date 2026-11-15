@@ -72,7 +72,8 @@ class GoogleSheetsGateway implements SheetsGateway {
               spreadsheetId,
               _range(sheet),
               valueRenderOption: 'UNFORMATTED_VALUE',
-              dateTimeRenderOption: 'FORMATTED_STRING',
+              // Даты приходят числом дней, независимо от языка таблицы.
+              dateTimeRenderOption: 'SERIAL_NUMBER',
             );
         return range.values ?? const [];
       });

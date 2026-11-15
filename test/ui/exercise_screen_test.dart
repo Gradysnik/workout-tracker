@@ -25,6 +25,8 @@ void main() {
     await t.ensureVisible(find.text(text));
     await t.tap(find.text(text));
     await t.pumpAndSettle();
+    // Пауза после сохранения, в течение которой повторное касание игнорируется.
+    await t.pump(const Duration(milliseconds: 600));
   }
 
   testWidgets('поля заполнены значениями того же подхода прошлой тренировки', (t) async {
@@ -144,5 +146,27 @@ void main() {
     await open(t, pulldown);
     await tapText(t, 'График прогресса');
     expect(find.byType(ProgressScreen), findsOneWidget);
+  });
+
+  testWidgets('двойное касание «Готово» сохраняет один подход', (t) async {
+    await open(t, pulldown);
+    await t.ensureVisible(find.text('Готово — подход 1'));
+    await t.tap(find.text('Готово — подход 1'));
+    await t.tap(find.text('Готово — подход 1'), warnIfMissed: false);
+    await t.pumpAndSettle();
+    expect((await today(pulldown)).map((r) => r.setNo), [1]);
+  });
+
+  testWidgets('правка старого подхода сохраняет его тренировку, даже если программа изменилась', (t) async {
+    const moved = ProgramExercise(workout: wC, order: 5, name: 'Тяга верхнего блока',
+        type: ExerciseType.strength, sets: 4, repsTarget: '8–10', weightStep: 5);
+    await h.pump(t, ExerciseScreen(exercise: moved, date: nov(10)));
+    await tapText(t, '40×10');
+    await t.tap(inField('reps', find.byIcon(Icons.add)));
+    await t.pump();
+    await tapText(t, 'Сохранить');
+    final edited = (await h.journal.rowsOn(nov(10)))
+        .firstWhere((r) => r.exercise == 'Тяга верхнего блока' && r.setNo == 1);
+    expect((edited.workout, edited.reps), (wA, 11));
   });
 }

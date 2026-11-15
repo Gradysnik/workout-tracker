@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uuid/uuid.dart';
@@ -49,6 +51,7 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
 
   @override
   void dispose() {
+    _cooldown?.cancel();
     _note.dispose();
     super.dispose();
   }
@@ -61,12 +64,14 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     _kcal = (kcal ?? 0).toDouble();
   }
 
-  JournalRow _row(String id, int setNo, int partNo) {
+  JournalRow _row(String id, int setNo, int partNo, {String? workout}) {
     final strength = _ex.type == ExerciseType.strength;
     return JournalRow(
       id: id,
       date: dateOnly(widget.date),
-      workout: _ex.workout,
+      // При правке старой записи тренировка остаётся прежней, даже если
+      // упражнение с тех пор перенесли в другой день.
+      workout: workout ?? _ex.workout,
       exercise: _ex.name,
       setNo: setNo,
       partNo: partNo,
@@ -79,9 +84,31 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     );
   }
 
-  Future<void> _save(JournalRow row) async {
-    await ref.read(journalStoreProvider).upsert(row);
-    ref.read(syncRunnerProvider).schedule();
+  /// Идёт сохранение или только что закончилось: повторное касание кнопки
+  /// игнорируется, чтобы случайный двойной тап не записал два подхода.
+  var _saving = false;
+  Timer? _cooldown;
+
+  Future<void> _save(JournalRow Function(List<JournalRow> today) build) async {
+    if (_saving) return;
+    _saving = true;
+    try {
+      final journal = ref.read(journalStoreProvider);
+      // Номер подхода считается по свежим данным, а не по тому, что успел
+      // нарисовать экран.
+      final key = exerciseKey(_ex.name);
+      final today = [
+        for (final r in await journal.rowsOn(dateOnly(widget.date)))
+          if (exerciseKey(r.exercise) == key) r
+      ];
+      await journal.upsert(build(today));
+      ref.read(syncRunnerProvider).schedule();
+    } catch (_) {
+      _saving = false;
+      rethrow;
+    }
+    _cooldown = Timer(
+        const Duration(milliseconds: 500), () => _saving = false);
     if (!mounted) return;
     setState(() {
       _editing = null;
@@ -89,6 +116,18 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
       _note.clear();
     });
   }
+
+  static int _lastSetNo(List<JournalRow> rows) =>
+      rows.fold<int>(0, (m, r) => r.setNo > m ? r.setNo : m);
+
+  Future<void> _saveNewSet() =>
+      _save((today) => _row(const Uuid().v4(), _lastSetNo(today) + 1, 1));
+
+  Future<void> _saveDropPart() => _save((today) {
+        final setNo = _lastSetNo(today);
+        final parts = today.where((r) => r.setNo == setNo).length;
+        return _row(const Uuid().v4(), setNo, parts + 1);
+      });
 
   Future<void> _delete(JournalRow row) async {
     await ref.read(journalStoreProvider).delete(row.id);
@@ -216,8 +255,9 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
         if (editing != null) ...[
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-            onPressed: () =>
-                _save(_row(editing.id, editing.setNo, editing.partNo)),
+            onPressed: () => _save((_) => _row(
+                editing.id, editing.setNo, editing.partNo,
+                workout: editing.workout)),
             child: const Text('Сохранить'),
           ),
           const SizedBox(height: 8),
@@ -247,15 +287,13 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
         ] else ...[
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-            onPressed: () =>
-                _save(_row(const Uuid().v4(), nextSetNo, 1)),
+            onPressed: _saveNewSet,
             child: Text(single ? 'Готово' : 'Готово — подход $nextSetNo'),
           ),
           if (_ex.dropSet && lastSetNo > 0) ...[
             const SizedBox(height: 8),
             OutlinedButton(
-              onPressed: () => _save(_row(
-                  const Uuid().v4(), lastSetNo, bySet[lastSetNo]!.length + 1)),
+              onPressed: _saveDropPart,
               child: const Text('+ часть дроп-сета'),
             ),
           ],

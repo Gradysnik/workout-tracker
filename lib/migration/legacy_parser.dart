@@ -152,11 +152,35 @@ List<_Part>? _cell(ExerciseType type, String text) {
   }
 }
 
+/// Ячейки для CSV-файла. Дробные числа пишутся с запятой: при импорте в
+/// таблицу с русскими настройками «7.5» превратилось бы в дату 7 мая.
+List<Object?> toCsvCells(List<Object?> cells) => [
+      for (final c in cells)
+        if (c is num && c == c.roundToDouble())
+          c.round()
+        else if (c is num)
+          c.toString().replaceAll('.', ',')
+        else
+          c
+    ];
+
+bool _hasData(String cell) {
+  final text = cell.trim().toLowerCase();
+  return text != 'skip' && RegExp(r'[1-9]').hasMatch(text);
+}
+
 LegacyResult parseLegacy(List<List<String>> cells) {
   final result = LegacyResult();
   if (cells.isEmpty) return result;
   final header = cells.first;
   final dates = [for (final c in header) _headerDates(c)];
+
+  for (var c = 1; c < dates.length; c++) {
+    if (dates[c].isEmpty &&
+        cells.skip(1).any((row) => c < row.length && _hasData(row[c]))) {
+      result.warnings.add('C${c + 1}: в заголовке не три даты, колонка пропущена');
+    }
+  }
 
   var section = -1;
   var workout = '';

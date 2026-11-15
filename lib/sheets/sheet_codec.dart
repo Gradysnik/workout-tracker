@@ -195,7 +195,7 @@ List<Object?> programToCells(ProgramExercise e) => [
       e.sets,
       e.repsTarget,
       e.dropSet ? 'да' : 'нет',
-      _numCell(e.weightStep),
+      e.weightStep == defaultWeightStep ? '' : _numCell(e.weightStep),
       e.note,
     ];
 

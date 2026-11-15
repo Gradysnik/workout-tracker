@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:workout_tracker/data/memory_stores.dart';
 import 'package:workout_tracker/domain/models.dart';
 import 'package:workout_tracker/providers.dart';
+import 'package:workout_tracker/sheets/google_auth.dart';
 import 'package:workout_tracker/sheets/sync_service.dart';
 
 const wA = 'Спина + Бицепс', wB = 'Грудь + Трицепс', wC = 'Ноги + Кор';
@@ -28,6 +29,7 @@ class Harness {
   final meta = MemoryMetaStore();
   DateTime today = nov(17);
   SyncService? sync;
+  GoogleAuth? auth;
 
   /// Программа на три дня и тренировки прошлой недели (10, 12 и 14 ноября).
   Future<void> seed() async {
@@ -49,7 +51,7 @@ class Harness {
     ]) {
       await journal.upsert(r);
     }
-    await journal.markSynced((await journal.pending()).map((p) => p.row.id));
+    await journal.markSynced(await journal.pending());
   }
 
   Future<void> pump(WidgetTester tester, Widget home) async {
@@ -63,9 +65,36 @@ class Harness {
         metaStoreProvider.overrideWithValue(meta),
         clockProvider.overrideWithValue(() => today),
         syncServiceProvider.overrideWithValue(sync),
+        googleAuthProvider.overrideWithValue(auth),
       ],
       child: MaterialApp(home: home),
     ));
     await tester.pumpAndSettle();
   }
+}
+
+/// Вход через Google без плагина: «входит» по первому запросу.
+class FakeGoogleAuth implements GoogleAuth {
+  String? _email;
+  bool cancel = false;
+
+  @override
+  String? get email => _email;
+  @override
+  bool get isConfigured => true;
+  @override
+  Stream<void> get changes => const Stream.empty();
+  @override
+  Future<bool> signInSilently() async => _email != null;
+  @override
+  Future<bool> signIn() async {
+    if (cancel) return false;
+    _email = 'user@example.com';
+    return true;
+  }
+
+  @override
+  Future<void> signOut() async => _email = null;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

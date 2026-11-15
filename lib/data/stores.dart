@@ -27,8 +27,10 @@ abstract class JournalStore {
 
   Future<List<PendingRow>> pending();
 
-  /// Снимает отметку «к отправке»; удалённые строки стираются окончательно.
-  Future<void> markSynced(Iterable<String> ids);
+  /// Снимает отметку «к отправке» с отправленных строк; удалённые стираются
+  /// окончательно. [pushed] — снимок [pending], который ушёл в таблицу:
+  /// строка, изменённая или удалённая после снимка, остаётся в очереди.
+  Future<void> markSynced(Iterable<PendingRow> pushed);
 
   /// Заменяет весь журнал; все строки считаются отправленными.
   Future<void> replaceAll(List<JournalRow> rows);

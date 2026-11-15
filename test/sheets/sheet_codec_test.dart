@@ -97,6 +97,11 @@ void main() {
         'Программа, строка 7: пустое название тренировки',
       ]);
     });
+    test('шаг веса по умолчанию записывается пустой ячейкой', () {
+      const e = ProgramExercise(workout: 'A', order: 1, name: 'Тяга', type: ExerciseType.strength, sets: 4);
+      expect(programToCells(e)[7], '');
+      expect(parseProgram([programHeader, programToCells(e)]).items.single, e);
+    });
     test('только заголовок или пустой лист', () {
       expect(parseProgram([programHeader]).items, isEmpty);
       expect(parseProgram([]).items, isEmpty);

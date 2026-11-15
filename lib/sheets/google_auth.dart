@@ -55,8 +55,16 @@ class GoogleAuth {
   /// Вход по нажатию кнопки: выбор аккаунта и согласие на доступ.
   Future<bool> signIn() async {
     await _init();
-    _user = await GoogleSignIn.instance.authenticate(scopeHint: scopes);
-    await _user!.authorizationClient.authorizeScopes(scopes);
+    try {
+      final user =
+          await GoogleSignIn.instance.authenticate(scopeHint: scopes);
+      await user.authorizationClient.authorizeScopes(scopes);
+      _user = user;
+    } on GoogleSignInException catch (e) {
+      // Пользователь закрыл окно выбора аккаунта — это не ошибка.
+      if (e.code == GoogleSignInExceptionCode.canceled) return false;
+      rethrow;
+    }
     _changes.add(null);
     return true;
   }

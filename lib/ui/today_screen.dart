@@ -17,7 +17,14 @@ class TodayScreen extends ConsumerWidget {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(syncRunnerProvider).run();
+          final report = await ref.read(syncRunnerProvider).run();
+          if (report?.failure != null && context.mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(SnackBar(
+                  content: Text(
+                      'Не удалось синхронизировать: ${report!.failure}')));
+          }
         },
         child: switch (data) {
           AsyncValue(:final value?) => _Body(value),
@@ -62,6 +69,7 @@ class _Body extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
+        const SyncStatus(),
         PopupMenuButton<String>(
           tooltip: 'Выбрать тренировку',
           onSelected: (w) =>
@@ -144,6 +152,7 @@ class _EmptyProgram extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        const SyncStatus(),
         const SizedBox(height: 48),
         const Icon(Icons.table_chart_outlined, size: 48),
         const SizedBox(height: 16),
@@ -173,6 +182,53 @@ class _EmptyProgram extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Плашка о проблемах последней синхронизации: сбой связи или доступа
+/// и ошибки заполнения листов. Без неё они оставались бы незамеченными.
+class SyncStatus extends ConsumerWidget {
+  const SyncStatus({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder(
+      valueListenable: ref.watch(syncRunnerProvider).lastReport,
+      builder: (context, report, _) {
+        final errors = report?.programErrors ?? const <String>[];
+        if (report == null || (report.failure == null && errors.isEmpty)) {
+          return const SizedBox.shrink();
+        }
+        final style = theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onErrorContainer);
+        return Card(
+          key: const Key('sync-problem'),
+          color: theme.colorScheme.errorContainer,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (report.failure != null)
+                  Text(
+                      'Не удалось синхронизировать. Подходы сохранены на '
+                      'телефоне и уйдут в таблицу позже.\n${report.failure}',
+                      style: style),
+                if (errors.isNotEmpty) ...[
+                  Text('Ошибки в таблице:',
+                      style: style?.copyWith(fontWeight: FontWeight.bold)),
+                  for (final e in errors.take(5)) Text(e, style: style),
+                  if (errors.length > 5)
+                    Text('…и ещё ${errors.length - 5}', style: style),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

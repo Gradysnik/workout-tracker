@@ -64,4 +64,51 @@ void main() {
     expect(await h.journal.historyOf('тяга верхнего блока'), isEmpty);
     expect(find.text('Журнал восстановлен из таблицы'), findsOneWidget);
   });
+
+  testWidgets('вход через Google сразу создаёт таблицу и синхронизирует', (t) async {
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    h.auth = FakeGoogleAuth();
+    await h.pump(t, const SettingsScreen());
+    expect(find.text('Синхронизировать'), findsOneWidget);
+    await tapText(t, 'Войти через Google');
+    expect(find.text('user@example.com'), findsOneWidget);
+    expect(gw.calls, contains('create'));
+    expect(await h.sync!.spreadsheetUrl(), isNotNull);
+  });
+
+  testWidgets('отменённый вход не показывает ошибку и ничего не создаёт', (t) async {
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    h.auth = FakeGoogleAuth()..cancel = true;
+    await h.pump(t, const SettingsScreen());
+    await tapText(t, 'Войти через Google');
+    expect(find.textContaining('Не получилось'), findsNothing);
+    expect(gw.calls, isEmpty);
+  });
+
+  testWidgets('выход из аккаунта забывает таблицу', (t) async {
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    h.auth = FakeGoogleAuth();
+    await h.pump(t, const SettingsScreen());
+    await tapText(t, 'Войти через Google');
+    await tapText(t, 'user@example.com');
+    expect(find.text('Войти через Google'), findsOneWidget);
+    expect(await h.sync!.spreadsheetUrl(), isNull);
+  });
+
+  testWidgets('восстановление с неразборными строками спрашивает, что делать', (t) async {
+    h.sync = SyncService(gw, h.journal, h.program, h.meta);
+    await h.sync!.ensureSpreadsheet();
+    gw.only[journalSheet]!.addAll([
+      journalRowToCells(jr(1, rdl, 1, w: 99, r: 5)),
+      ['плохая', 'вчера', wC, 'Румынская тяга', 1, 1, 60, 10],
+    ]);
+    await h.pump(t, const SettingsScreen());
+    await tapText(t, 'Восстановить из таблицы');
+    await tapText(t, 'Восстановить');
+    expect(find.textContaining('Журнал, строка 3: непонятная дата «вчера»'), findsOneWidget);
+    expect(await h.journal.historyOf('тяга верхнего блока'), isNotEmpty);
+    await tapText(t, 'Восстановить без них');
+    expect((await h.journal.historyOf('румынская тяга')).map((r) => r.weight), [99.0]);
+    expect(await h.journal.historyOf('тяга верхнего блока'), isEmpty);
+  });
 }

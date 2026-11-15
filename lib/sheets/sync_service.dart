@@ -25,6 +25,21 @@ class SyncService {
 
   Future<SyncReport>? _running;
 
+  /// Хвост очереди операций с таблицей: синхронизация, отправка и
+  /// восстановление выполняются строго по одной, иначе две отправки могли бы
+  /// прочитать лист до добавления строк и продублировать их.
+  Future<void> _queue = Future.value();
+
+  Future<T> _serial<T>(Future<T> Function() action) {
+    final result = _queue.then((_) => action());
+    _queue = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  /// Забывает таблицу (при выходе из аккаунта): при следующей синхронизации
+  /// она будет найдена или создана заново.
+  Future<void> forgetSpreadsheet() => _meta.set(_idKey, null);
+
   Future<String?> spreadsheetUrl() async {
     final id = await _meta.get(_idKey);
     return id == null ? null : 'https://docs.google.com/spreadsheets/d/$id';
@@ -43,7 +58,9 @@ class SyncService {
     return id;
   }
 
-  Future<List<String>> pullProgram() async {
+  Future<List<String>> pullProgram() => _serial(_pullProgram);
+
+  Future<List<String>> _pullProgram() async {
     final id = await ensureSpreadsheet();
     final program = parseProgram(await _gateway.readSheet(id, programSheet));
     final schedule = parseSchedule(await _gateway.readSheet(id, scheduleSheet));
@@ -55,7 +72,9 @@ class SyncService {
   ///
   /// Строки находятся в листе по колонке ID, поэтому повтор после обрыва
   /// обновляет уже добавленные строки, а не создаёт дубликаты.
-  Future<int> pushJournal() async {
+  Future<int> pushJournal() => _serial(_pushJournal);
+
+  Future<int> _pushJournal() async {
     final pending = await _journal.pending();
     if (pending.isEmpty) return 0;
     final id = await ensureSpreadsheet();
@@ -87,27 +106,34 @@ class SyncService {
     if (toDelete.isNotEmpty) {
       await _gateway.deleteRows(id, journalSheet, toDelete);
     }
-    await _journal.markSynced(pending.map((p) => p.row.id));
+    await _journal.markSynced(pending);
     return pending.length;
   }
 
   /// Заново загружает журнал из таблицы, предварительно отправив своё.
-  Future<void> restoreJournal() async {
-    await pushJournal();
-    final id = await ensureSpreadsheet();
-    final parsed = parseJournal(await _gateway.readSheet(id, journalSheet));
-    await _journal.replaceAll(parsed.items);
-  }
+  ///
+  /// Возвращает строки листа, которые не удалось разобрать. Если такие есть,
+  /// журнал на телефоне не трогается — иначе они молча пропали бы;
+  /// с [ignoreErrors] восстанавливаются только разобранные строки.
+  Future<List<String>> restoreJournal({bool ignoreErrors = false}) =>
+      _serial(() async {
+        await _pushJournal();
+        final id = await ensureSpreadsheet();
+        final parsed = parseJournal(await _gateway.readSheet(id, journalSheet));
+        if (parsed.errors.isNotEmpty && !ignoreErrors) return parsed.errors;
+        await _journal.replaceAll(parsed.items);
+        return const [];
+      });
 
   /// Полная синхронизация. Не бросает: ошибка возвращается в отчёте.
   /// Одновременные вызовы разделяют один и тот же проход.
-  Future<SyncReport> syncAll() =>
-      _running ??= _syncAll().whenComplete(() => _running = null);
+  Future<SyncReport> syncAll() => _running ??=
+      _serial(_syncAll).whenComplete(() => _running = null);
 
   Future<SyncReport> _syncAll() async {
     try {
-      final errors = await pullProgram();
-      final pushed = await pushJournal();
+      final errors = await _pullProgram();
+      final pushed = await _pushJournal();
       return SyncReport(programErrors: errors, pushed: pushed);
     } catch (e) {
       return SyncReport(programErrors: lastProgramErrors, failure: e);

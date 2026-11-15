@@ -1,5 +1,9 @@
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+
+import 'domain/models.dart';
+import 'providers.dart';
 
 import 'ui/history_screen.dart';
 import 'ui/program_screen.dart';
@@ -29,15 +33,43 @@ class WorkoutTrackerApp extends StatelessWidget {
       );
 }
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   var _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Приложение могло пролежать в фоне до другого дня: без этого подходы
+      // записывались бы вчерашней датой.
+      if (dateOnly(ref.read(clockProvider)()) != ref.read(todayDateProvider)) {
+        ref.invalidate(todayDateProvider);
+      }
+      ref.read(syncRunnerProvider).run();
+    } else if (state == AppLifecycleState.paused) {
+      // Последние подходы тренировки уходят в таблицу при сворачивании.
+      ref.read(syncRunnerProvider).run();
+    }
+  }
 
   static const _titles = ['Сегодня', 'История', 'Программа'];
 
