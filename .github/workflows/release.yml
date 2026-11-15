@@ -1,0 +1,56 @@
+name: Release APK
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      GOOGLE_SERVER_CLIENT_ID: ${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверить секреты
+        run: |
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD GOOGLE_SERVER_CLIENT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Не задан секрет $name. См. docs/setup.md, шаг 3."
+              exit 1
+            fi
+          done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter test
+      - name: Ключ подписи
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+      - name: Сборка APK
+        run: |
+          flutter build apk --release \
+            --build-name="${GITHUB_REF_NAME#v}" \
+            --build-number="$GITHUB_RUN_NUMBER" \
+            --dart-define=GOOGLE_SERVER_CLIENT_ID="$GOOGLE_SERVER_CLIENT_ID"
+          mv build/app/outputs/flutter-apk/app-release.apk "workout-tracker-${GITHUB_REF_NAME#v}.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: workout-tracker-*.apk
+          generate_release_notes: true

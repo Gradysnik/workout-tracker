@@ -1,17 +1,45 @@
-# workout_tracker
+# Workout Tracker
 
-A new Flutter project.
+Личное Android-приложение для учёта тренировок: показывает упражнения сегодняшнего дня, записывает подходы в пару касаний и синхронизирует журнал с Google-таблицей.
 
-## Getting Started
+- **Сегодня** — только упражнения текущей тренировки, с целью и результатом прошлого раза.
+- **Ввод подхода** — крупные кнопки «плюс/минус», значения подставлены с прошлой тренировки.
+- **Прогресс** — график и история по каждому упражнению. При замене упражнения в программе новое начинается с нуля, старое остаётся в архиве.
+- **Google-таблица** — программу и расписание вы правите в таблице, журнал подходов пишет приложение. Работает без сети, отправляет данные при её появлении.
 
-This project is a starting point for a Flutter application.
+## Установка
 
-A few resources to get you started if this is your first Flutter project:
+APK лежит на странице [Releases](../../releases). Перед первой сборкой нужна разовая настройка: [docs/setup.md](docs/setup.md).
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Разработка
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Нужен [Flutter](https://docs.flutter.dev/get-started/install) (stable).
+
+```bash
+flutter pub get
+```
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+```bash
+flutter test
+```
+
+Демо-режим в браузере, с образцом данных и без входа в Google:
+
+```bash
+flutter run -d web-server --dart-define=DEMO=true
+```
+
+## Устройство
+
+| Каталог | Что внутри |
+|---|---|
+| `lib/domain` | Модели, выбор тренировки дня, подстановка значений, расчёт прогресса |
+| `lib/data` | Локальные хранилища: SQLite (drift) и вариант в памяти для тестов и демо |
+| `lib/sheets` | Формат листов таблицы, синхронизация, вход через Google |
+| `lib/migration`, `tool/migrate.dart` | Перенос истории из старой таблицы |
+| `lib/ui` | Экраны |
+| `docs/superpowers` | Дизайн-документ и план реализации |
