@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -20,11 +20,12 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze
       - run: flutter test
-      # Проверяет, что Android-сборка проходит. APK отладочный и в демо-режиме:
-      # вход через Google в нём не работает, для телефона берите APK из Releases.
-      - run: flutter build apk --debug --dart-define=DEMO=true
+      # Проверяет релизную Android-сборку — тем же путём, что и Release APK.
+      # APK в демо-режиме и подписан отладочным ключом: вход через Google в нём
+      # не работает, для телефона берите APK из Releases.
+      - run: flutter build apk --release --dart-define=DEMO=true
       - uses: actions/upload-artifact@v4
         with:
-          name: demo-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: demo-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
