@@ -56,8 +56,6 @@ double? _number(List<Object?> row, int i) {
   return double.parse(s);
 }
 
-int? _int(List<Object?> row, int i) => _number(row, i)?.round();
-
 bool _isBlank(List<Object?> row) =>
     row.every((c) => c == null || c.toString().trim().isEmpty);
 
