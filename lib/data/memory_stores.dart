@@ -5,10 +5,10 @@ import '../domain/models.dart';
 import 'stores.dart';
 
 class _Entry {
-  _Entry(this.row, {this.pending = true, this.deleted = false});
+  _Entry(this.row, {this.pending = true});
   JournalRow row;
   bool pending;
-  bool deleted;
+  bool deleted = false;
 }
 
 /// Журнал в памяти: для тестов и демо-режима.
