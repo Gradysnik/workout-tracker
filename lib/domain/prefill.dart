@@ -29,6 +29,18 @@ SetDraft prefillSet({
 
   final source = find(lastSession, setNo) ?? find(today, setNo - 1);
   final target = lowerBound(exercise.repsTarget);
+  // У кардио цель («5 минут») обычно записана в примечании.
+  final cardioTarget = target > 0 ? target : lowerBound(exercise.note);
+
+  /// Кардио обычно один подход: берём прошлый результат даже если номер
+  /// подхода не совпал, а без истории — цель из программы (мин).
+  JournalRow? cardioSource() {
+    if (source != null) return source;
+    for (final r in [...today.reversed, ...lastSession]) {
+      if (r.minutes != null) return r;
+    }
+    return null;
+  }
   switch (exercise.type) {
     case ExerciseType.strength:
       return SetDraft(
@@ -36,7 +48,12 @@ SetDraft prefillSet({
     case ExerciseType.timed:
       return SetDraft(seconds: source?.seconds ?? target);
     case ExerciseType.cardio:
+      final c = cardioSource();
+      final minutes = c?.minutes;
       return SetDraft(
-          minutes: source?.minutes ?? 0, kcal: source?.kcal ?? 0);
+          minutes: minutes != null && minutes > 0
+              ? minutes
+              : cardioTarget.toDouble(),
+          kcal: c?.kcal ?? 0);
   }
 }

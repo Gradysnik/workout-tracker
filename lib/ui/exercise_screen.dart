@@ -10,6 +10,7 @@ import '../domain/prefill.dart';
 import '../providers.dart';
 import 'format.dart';
 import 'progress_screen.dart';
+import 'summary_screen.dart';
 import 'today_screen.dart' show doneColor;
 import 'widgets/stepper_field.dart';
 
@@ -25,6 +26,17 @@ final _rowsProvider = FutureProvider.autoDispose
     today: [for (final r in day) if (exerciseKey(r.exercise) == arg.key) r],
     last: await journal.lastSessionOf(arg.key, before: arg.date),
   );
+});
+
+/// Все упражнения тренировки с подходами за день: по ним строится
+/// «Далее по плану».
+final _planProvider = FutureProvider.autoDispose
+    .family<List<ExerciseStatus>, ({String workout, DateTime date})>(
+        (ref, arg) async {
+  ref.watch(revisionProvider);
+  final program = await ref.watch(programStoreProvider).program();
+  return loadExercises(
+      ref.watch(journalStoreProvider), program, arg.workout, arg.date);
 });
 
 /// Ввод подходов упражнения [exercise] за дату [date].
@@ -46,6 +58,8 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
 
   /// Редактируемая запись или null, если вводится новый подход.
   JournalRow? _editing;
+
+  var _planExpanded = false;
 
   ProgramExercise get _ex => widget.exercise;
 
@@ -120,8 +134,88 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
   static int _lastSetNo(List<JournalRow> rows) =>
       rows.fold<int>(0, (m, r) => r.setNo > m ? r.setNo : m);
 
-  Future<void> _saveNewSet() =>
-      _save((today) => _row(const Uuid().v4(), _lastSetNo(today) + 1, 1));
+  Future<void> _saveNewSet() async {
+    await _save((today) => _row(const Uuid().v4(), _lastSetNo(today) + 1, 1));
+    if (!mounted) return;
+    // Последний подход последнего упражнения — показываем итог тренировки.
+    final plan = await _freshPlan();
+    if (!mounted) return;
+    final mine = plan.where(
+        (s) => exerciseKey(s.exercise.name) == exerciseKey(_ex.name));
+    if (mine.any((s) => s.setsDone == _ex.sets) && plan.every((s) => s.done)) {
+      _openSummary(replace: false);
+    }
+  }
+
+  Future<List<ExerciseStatus>> _freshPlan() async => loadExercises(
+      ref.read(journalStoreProvider),
+      await ref.read(programStoreProvider).program(),
+      _ex.workout,
+      dateOnly(widget.date));
+
+  void _openSummary({required bool replace}) {
+    final route = MaterialPageRoute<void>(
+        builder: (_) =>
+            WorkoutSummaryScreen(workout: _ex.workout, date: widget.date));
+    final nav = Navigator.of(context);
+    replace ? nav.pushReplacement(route) : nav.push(route);
+  }
+
+  void _openExercise(ProgramExercise e) =>
+      Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+          builder: (_) => ExerciseScreen(exercise: e, date: widget.date)));
+
+  /// Невыполненные упражнения тренировки, начиная со следующего по порядку.
+  List<ProgramExercise> _following(List<ExerciseStatus> plan) {
+    final i = plan.indexWhere(
+        (s) => exerciseKey(s.exercise.name) == exerciseKey(_ex.name));
+    final ordered =
+        i < 0 ? plan : [...plan.sublist(i + 1), ...plan.sublist(0, i)];
+    return [
+      for (final s in ordered)
+        if (!s.done && exerciseKey(s.exercise.name) != exerciseKey(_ex.name))
+          s.exercise
+    ];
+  }
+
+  Widget _upNext(ThemeData theme, List<ProgramExercise> following) {
+    final shown = _planExpanded ? following : following.take(3).toList();
+    return Card(
+      key: const Key('up-next'),
+      margin: const EdgeInsets.only(top: 12),
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text('Далее по плану', style: theme.textTheme.titleSmall),
+            ),
+            for (final e in shown)
+              ListTile(
+                dense: true,
+                title: Text(e.name),
+                subtitle: Text(targetText(e)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _openExercise(e),
+              ),
+            if (following.length > 3)
+              Center(
+                child: TextButton(
+                  onPressed: () =>
+                      setState(() => _planExpanded = !_planExpanded),
+                  child: Text(_planExpanded
+                      ? 'Свернуть'
+                      : 'Показать все (${following.length})'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _saveDropPart() => _save((today) {
         final setNo = _lastSetNo(today);
@@ -186,6 +280,10 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     }
     final single = _ex.type == ExerciseType.cardio && _ex.sets == 1;
     final editing = _editing;
+    final plan = ref
+        .watch(_planProvider((workout: _ex.workout, date: dateOnly(widget.date))))
+        .value;
+    final following = plan == null ? <ProgramExercise>[] : _following(plan);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
@@ -297,6 +395,29 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
               child: const Text('+ часть дроп-сета'),
             ),
           ],
+        ],
+        if (editing == null && plan != null) ...[
+          const SizedBox(height: 8),
+          if (following.isNotEmpty)
+            FilledButton.tonalIcon(
+              key: const Key('next-exercise'),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52)),
+              onPressed: () => _openExercise(following.first),
+              icon: const Icon(Icons.skip_next),
+              label: Text('Следующее: ${following.first.name}',
+                  overflow: TextOverflow.ellipsis),
+            )
+          else
+            FilledButton.tonalIcon(
+              key: const Key('finish-workout'),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52)),
+              onPressed: () => _openSummary(replace: true),
+              icon: const Icon(Icons.flag),
+              label: const Text('Завершить тренировку'),
+            ),
+          if (following.isNotEmpty) _upNext(theme, following),
         ],
         const SizedBox(height: 8),
         TextButton.icon(

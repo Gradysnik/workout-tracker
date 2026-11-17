@@ -37,7 +37,7 @@ Future<void> main() async {
   final journal = DriftJournalStore(db);
   final program = DriftProgramStore(db);
   final meta = DriftMetaStore(db);
-  final auth = GoogleAuth();
+  final auth = GoogleAuth(meta);
   final sync = SyncService(GoogleSheetsGateway(auth), journal, program, meta);
 
   final container = ProviderContainer(overrides: [

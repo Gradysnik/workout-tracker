@@ -43,4 +43,22 @@ void main() {
         today: [], lastSession: [row(1, m: 5, k: 71)]);
     expect((d.minutes, d.kcal), (5, 71));
   });
+  ProgramExercise cardio({String reps = '', String note = ''}) => ProgramExercise(
+      workout: 'A', order: 1, name: 'Бег', type: ExerciseType.cardio, sets: 1,
+      repsTarget: reps, note: note);
+  test('кардио без истории берёт минуты из примечания', () {
+    final d = prefillSet(exercise: cardio(note: '10 минут'), setNo: 1,
+        today: [], lastSession: []);
+    expect((d.minutes, d.kcal), (10, 0));
+  });
+  test('кардио: номер подхода не совпал — берём прошлый результат', () {
+    final d = prefillSet(exercise: cardio(note: '5 минут'), setNo: 2,
+        today: [], lastSession: [row(1, m: 12, k: 90)]);
+    expect((d.minutes, d.kcal), (12, 90));
+  });
+  test('кардио: в прошлый раз минут не было — цель из программы', () {
+    final d = prefillSet(exercise: cardio(reps: '15'), setNo: 1,
+        today: [], lastSession: [row(1, k: 90)]);
+    expect((d.minutes, d.kcal), (15, 90));
+  });
 }

@@ -169,4 +169,49 @@ void main() {
         .firstWhere((r) => r.exercise == 'Тяга верхнего блока' && r.setNo == 1);
     expect((edited.workout, edited.reps), (wA, 11));
   });
+
+  testWidgets('кардио без истории: минуты из цели программы', (t) async {
+    await h.journal.delete((await h.journal.rowsOn(nov(10)))
+        .firstWhere((r) => r.exercise == rowing.name).id);
+    await open(t, rowing);
+    expect(value(t, 'minutes'), '5');
+  });
+
+  testWidgets('«Далее по плану» и кнопка следующего упражнения', (t) async {
+    await open(t, seatedRow);
+    // Из тренировки A остальные: гребной тренажёр и тяга верхнего блока.
+    expect(find.byKey(const Key('up-next')), findsOneWidget);
+    expect(find.text('Далее по плану'), findsOneWidget);
+    expect(find.text('Следующее: Гребной тренажёр'), findsOneWidget);
+    await t.tap(find.byKey(const Key('next-exercise')));
+    await t.pumpAndSettle();
+    expect(find.text('Гребной тренажёр'), findsWidgets);
+    expect(value(t, 'minutes'), '5');
+  });
+
+  testWidgets('больше трёх упражнений — список разворачивается', (t) async {
+    await h.program.replace([
+      for (var i = 1; i <= 5; i++)
+        ProgramExercise(workout: wA, order: i, name: 'Упр $i',
+            type: ExerciseType.strength, sets: 2, repsTarget: '10'),
+    ], const []);
+    await open(t, (await h.program.program()).first);
+    expect(find.text('Упр 2'), findsOneWidget);
+    expect(find.text('Упр 4'), findsOneWidget);
+    expect(find.text('Упр 5'), findsNothing);
+    await t.ensureVisible(find.text('Показать все (4)'));
+    await t.tap(find.text('Показать все (4)'));
+    await t.pumpAndSettle();
+    expect(find.text('Упр 5'), findsOneWidget);
+  });
+
+  testWidgets('последний подход последнего упражнения — итог тренировки', (t) async {
+    await h.program.replace(const [rowing], const []);
+    await open(t, rowing);
+    await tapText(t, 'Готово');
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('summary-title')), findsOneWidget);
+    expect(find.text('Тренировка окончена, ты красавчик! 💪'), findsOneWidget);
+    expect(find.text('Гребной тренажёр'), findsOneWidget);
+  });
 }
