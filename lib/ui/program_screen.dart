@@ -6,6 +6,7 @@ import '../domain/models.dart';
 import '../providers.dart';
 import '../sheets/sheet_codec.dart' show weekdayName;
 import 'format.dart';
+import 'program_editor_screen.dart';
 import 'progress_screen.dart';
 
 typedef _ProgramData = ({
@@ -19,7 +20,7 @@ final _programProvider = FutureProvider.autoDispose<_ProgramData>((ref) async {
   return (program: await store.program(), schedule: await store.schedule());
 });
 
-/// Программа и расписание из таблицы — только для чтения.
+/// Программа и расписание: просмотр и вход в редактор.
 class ProgramScreen extends ConsumerWidget {
   const ProgramScreen({super.key});
 
@@ -59,7 +60,8 @@ class ProgramScreen extends ConsumerWidget {
               report?.programErrors ??
               sync?.lastProgramErrors ??
               const <String>[];
-          return _list(context, theme, data != null, program, ordered, errors);
+          return _list(
+              context, theme, data != null, program, schedule, ordered, errors);
         },
       ),
     );
@@ -70,12 +72,28 @@ class ProgramScreen extends ConsumerWidget {
     ThemeData theme,
     bool loaded,
     List<ProgramExercise> program,
+    List<ScheduleEntry> schedule,
     List<({String workout, String? day})> ordered,
     List<String> errors,
   ) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
+        if (loaded)
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              key: const Key('edit-program'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ProgramEditorScreen(
+                      program: program, schedule: schedule),
+                ),
+              ),
+              icon: const Icon(Icons.edit),
+              label: const Text('Изменить'),
+            ),
+          ),
         if (errors.isNotEmpty)
           Card(
             color: theme.colorScheme.errorContainer,
@@ -134,8 +152,8 @@ class ProgramScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
             child: Text(
-              'Программа и расписание правятся в Google-таблице, '
-              'в листах «Программа» и «Расписание».',
+              'Правки из редактора записываются в Google-таблицу '
+              '(листы «Программа» и «Расписание»); там их тоже можно менять.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

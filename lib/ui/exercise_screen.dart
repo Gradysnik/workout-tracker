@@ -165,12 +165,13 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
       Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
           builder: (_) => ExerciseScreen(exercise: e, date: widget.date)));
 
-  /// Невыполненные упражнения тренировки, начиная со следующего по порядку.
+  /// Невыполненные упражнения тренировки: сначала пропущенные и недоделанные
+  /// (те, что стоят в плане раньше текущего), затем идущие после него.
   List<ProgramExercise> _following(List<ExerciseStatus> plan) {
     final i = plan.indexWhere(
         (s) => exerciseKey(s.exercise.name) == exerciseKey(_ex.name));
     final ordered =
-        i < 0 ? plan : [...plan.sublist(i + 1), ...plan.sublist(0, i)];
+        i < 0 ? plan : [...plan.sublist(0, i), ...plan.sublist(i + 1)];
     return [
       for (final s in ordered)
         if (!s.done && exerciseKey(s.exercise.name) != exerciseKey(_ex.name))
@@ -178,7 +179,18 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     ];
   }
 
-  Widget _upNext(ThemeData theme, List<ProgramExercise> following) {
+  Widget _upNext(ThemeData theme, List<ProgramExercise> following,
+      List<ExerciseStatus> plan) {
+    final cur = plan.indexWhere(
+        (s) => exerciseKey(s.exercise.name) == exerciseKey(_ex.name));
+    String? flag(ProgramExercise e) {
+      final idx = plan.indexWhere(
+          (s) => exerciseKey(s.exercise.name) == exerciseKey(e.name));
+      if (idx < 0 || cur < 0 || idx > cur) return null;
+      final n = plan[idx].setsDone;
+      return n == 0 ? 'пропущено' : 'недоделано: $n из ${e.sets}';
+    }
+
     final shown = _planExpanded ? following : following.take(3).toList();
     return Card(
       key: const Key('up-next'),
@@ -197,7 +209,10 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
               ListTile(
                 dense: true,
                 title: Text(e.name),
-                subtitle: Text(targetText(e)),
+                subtitle: Text([
+                  if (flag(e) != null) flag(e)!,
+                  targetText(e),
+                ].join(' · ')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _openExercise(e),
               ),
@@ -417,7 +432,7 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
               icon: const Icon(Icons.flag),
               label: const Text('Завершить тренировку'),
             ),
-          if (following.isNotEmpty) _upNext(theme, following),
+          if (following.isNotEmpty) _upNext(theme, following, plan),
         ],
         const SizedBox(height: 8),
         TextButton.icon(

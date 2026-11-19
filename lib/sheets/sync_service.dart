@@ -1,4 +1,5 @@
 import '../data/stores.dart';
+import '../domain/models.dart';
 import 'sheet_codec.dart';
 import 'sheets_gateway.dart';
 
@@ -67,6 +68,19 @@ class SyncService {
     await _program.replace(program.items, schedule.items);
     return lastProgramErrors = [...program.errors, ...schedule.errors];
   }
+
+  /// Записывает программу и расписание в таблицу и в локальное хранилище.
+  /// При ошибке сети бросает исключение, локальные данные не меняются.
+  Future<void> savePlan(
+          List<ProgramExercise> program, List<ScheduleEntry> schedule) =>
+      _serial(() async {
+        final id = await ensureSpreadsheet();
+        await _gateway.replaceRows(
+            id, programSheet, [for (final e in program) programToCells(e)]);
+        await _gateway.replaceRows(
+            id, scheduleSheet, [for (final e in schedule) scheduleToCells(e)]);
+        await _program.replace(program, schedule);
+      });
 
   /// Отправляет ожидающие строки журнала. Возвращает их количество.
   ///

@@ -189,6 +189,19 @@ void main() {
     expect(value(t, 'minutes'), '5');
   });
 
+  testWidgets('пропущенное и недоделанное упражнение идёт первым', (t) async {
+    // Тяга верхнего блока — второе по плану; гребной тренажёр (первый) пропущен.
+    await open(t, pulldown);
+    expect(find.text('Следующее: Гребной тренажёр'), findsOneWidget);
+    expect(find.textContaining('пропущено'), findsOneWidget);
+    // Недоделанное упражнение тоже возвращается в список.
+    await h.journal.upsert(JournalRow(
+        id: 'p1', date: nov(17), workout: wA, exercise: pulldown.name,
+        setNo: 1, partNo: 1, weight: 40, reps: 10));
+    await open(t, seatedRow);
+    expect(find.textContaining('недоделано: 1 из'), findsOneWidget);
+  });
+
   testWidgets('больше трёх упражнений — список разворачивается', (t) async {
     await h.program.replace([
       for (var i = 1; i <= 5; i++)

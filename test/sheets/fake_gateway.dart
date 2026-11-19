@@ -73,4 +73,14 @@ class FakeSheetsGateway implements SheetsGateway {
       rows.removeAt(n - 1);
     }
   }
+
+  @override
+  Future<void> replaceRows(
+      String spreadsheetId, String sheet, List<List<Object?>> rows) async {
+    _net('replace $sheet ${rows.length}');
+    final data = spreadsheets[spreadsheetId]![sheet]!;
+    data
+      ..removeRange(1, data.length)
+      ..addAll(rows.map(List.of));
+  }
 }

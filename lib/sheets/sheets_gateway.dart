@@ -21,4 +21,8 @@ abstract class SheetsGateway {
   /// Удаляет строки листа целиком; номера — до удаления (нумерация с 1).
   Future<void> deleteRows(
       String spreadsheetId, String sheet, List<int> rowNumbers);
+
+  /// Заменяет все строки листа, кроме заголовка, на [rows].
+  Future<void> replaceRows(
+      String spreadsheetId, String sheet, List<List<Object?>> rows);
 }

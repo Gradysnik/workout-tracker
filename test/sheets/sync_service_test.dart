@@ -212,4 +212,26 @@ void main() {
       expect(sheetJournal().map((r) => r.id), ['1']);
     });
   });
+
+  test('savePlan пишет программу и расписание в таблицу и в хранилище', () async {
+    const e = ProgramExercise(
+        workout: 'A', order: 1, name: 'Тяга', type: ExerciseType.strength,
+        sets: 3, repsTarget: '8', weightStep: 5);
+    const sch = [ScheduleEntry(weekday: DateTime.monday, workout: 'A')];
+    await sync.savePlan(const [e], sch);
+    expect(gw.only[programSheet], [programHeader, programToCells(e)]);
+    expect(gw.only[scheduleSheet], [scheduleHeader, ['Пн', 'A']]);
+    expect(await program.program(), [e]);
+    // Следующая синхронизация возвращает то же самое.
+    await sync.syncAll();
+    expect(await program.program(), [e]);
+    expect(await program.schedule(), sch);
+  });
+
+  test('savePlan при обрыве связи не меняет локальную программу', () async {
+    await sync.ensureSpreadsheet();
+    gw.offline = true;
+    await expectLater(sync.savePlan(const [], const []), throwsException);
+    expect(await program.program(), isEmpty);
+  });
 }

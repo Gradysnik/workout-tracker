@@ -125,4 +125,20 @@ class GoogleSheetsGateway implements SheetsGateway {
             ]),
             spreadsheetId);
       });
+
+  @override
+  Future<void> replaceRows(
+          String spreadsheetId, String sheet, List<List<Object?>> rows) =>
+      _with((client) async {
+        final api = sheets.SheetsApi(client);
+        await api.spreadsheets.values.clear(
+            sheets.ClearValuesRequest(), spreadsheetId, _range(sheet, 'A2:Z'));
+        if (rows.isEmpty) return;
+        await api.spreadsheets.values.update(
+          sheets.ValueRange(values: rows),
+          spreadsheetId,
+          _range(sheet, 'A2'),
+          valueInputOption: 'RAW',
+        );
+      });
 }
